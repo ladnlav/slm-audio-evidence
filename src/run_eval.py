@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import time
 
 # Работает и как `python src/run_eval.py`, и как `python -m src.run_eval`
 try:
@@ -107,6 +108,7 @@ def run_evaluation(
 
     evaluated_data = []
     judged_rows = []
+    judge_call_count = 0
 
     # 3. Сопоставляем каждый ответ с категорией и оцениваем
     with open(cache_path, "a", encoding="utf-8") as cache_file:
@@ -129,11 +131,17 @@ def run_evaluation(
                 if cached is not None:
                     verdict_value, raw_output = cached["verdict"], cached["raw_output"]
                 else:
+                    # No per-item progress otherwise -- with thinking enabled a single call can
+                    # take tens of seconds, and total silence is indistinguishable from a hang.
+                    judge_call_count += 1
+                    t0 = time.time()
+                    print(f"[judge] #{judge_call_count} {item_id}...", end=" ", flush=True)
                     try:
                         result = llm_judge.judge(item["transcript"], item["question"], gold_answer, resp["response"])
                         verdict_value, raw_output = result.verdict.value, result.raw_output
+                        print(f"{verdict_value} ({time.time() - t0:.1f}s)")
                     except Exception as exc:  # keep the run alive; item stays pending-manual
-                        print(f"[!] LLM-судья упал на {item_id}: {exc}")
+                        print(f"FAILED ({time.time() - t0:.1f}s): {exc}")
                         verdict_value, raw_output = Verdict.UNPARSEABLE.value, ""
                     cache_file.write(json.dumps({
                         "id": item_id, "judge_name": llm_judge.name, "prompt_version": llm_judge.prompt_version,
