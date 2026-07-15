@@ -126,7 +126,7 @@ python data/generation/tts_fallback.py --text "Your passage text here" --out dat
 
 ```bash
 pip install -r requirements.txt
-# инференс (нужен GPU; либо открой notebooks/colab_run.ipynb в Colab):
+# инференс (нужен GPU; либо открой notebooks/kaggle_run.ipynb в Kaggle):
 python -m src.inference --model qwen2audio --strategy plain --data data/manifests/pilot.jsonl --out results/
 # оценка:
 python -m src.run_eval --responses results/<run_id>/responses.jsonl

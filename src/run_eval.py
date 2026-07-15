@@ -5,9 +5,11 @@ import os
 # Работает и как `python src/run_eval.py`, и как `python -m src.run_eval`
 try:
     from src.judge import classify_response, check_correctness
+    from src.judges import PROMPT_VERSION, Verdict, build_judge
     from src.metrics import calculate_all_metrics, generate_markdown_report
 except ImportError:
     from judge import classify_response, check_correctness
+    from judges import PROMPT_VERSION, Verdict, build_judge
     from metrics import calculate_all_metrics, generate_markdown_report
 
 
@@ -19,6 +21,12 @@ def parse_args() -> argparse.Namespace:
                         help="JSONL ответов модели из results/<run_id>/responses.jsonl.")
     parser.add_argument("--out", default=None,
                         help="Куда писать отчёт и разметку; по умолчанию рядом с --responses.")
+    parser.add_argument("--judge", choices=["none", "local", "gemini", "fake"], default="none",
+                        help="LLM-судья для категории B (label=answer). 'none' (по умолчанию) "
+                             "оставляет их 'pending-manual' — старое поведение не меняется. "
+                             "'fake' — детерминированная заглушка без GPU/API, для smoke-теста.")
+    parser.add_argument("--judge-model", default=None,
+                        help="Переопределить модель судьи по умолчанию для выбранного backend.")
     return parser.parse_args()
 
 
@@ -35,13 +43,42 @@ def load_jsonl(file_path: str) -> list:
     return data
 
 
-def run_evaluation(manifest_path: str, responses_path: str, out_dir: str) -> None:
-    # 1. Загружаем манифест (там хранятся правильные ответы и категории A/B/C)
+def load_judge_cache(cache_path: str) -> dict:
+    """Keyed by (id, judge_name, prompt_version): a rubric or backend change never
+    silently reuses a stale verdict, but reruns after a crash or a rule-classifier
+    tweak skip LLM calls that are still valid — LLM calls are the expensive part.
+    """
+    cache = {}
+    for row in load_jsonl(cache_path):
+        key = (row["id"], row["judge_name"], row["prompt_version"])
+        cache[key] = row
+    return cache
+
+
+def run_evaluation(
+    manifest_path: str,
+    responses_path: str,
+    out_dir: str,
+    judge_backend: str = "none",
+    judge_model: str | None = None,
+    judge=None,
+) -> None:
+    """`judge`: an already-built LLMJudge instance, for callers that grade several
+    runs in one process (e.g. a Colab cell looping over all pilot runs) and want to
+    load the model once instead of once per run. Takes priority over judge_backend/
+    judge_model when given; the CLI entry point below never passes it.
+    """
+    # 1. Загружаем манифест (там хранятся правильные ответы, транскрипты и категории A/B/C)
     manifest_items = load_jsonl(manifest_path)
     if not manifest_items:
         return
     manifest_dict = {
-        item["id"]: {"category": item["category"], "gold_answer": item["gold_answer"]}
+        item["id"]: {
+            "category": item["category"],
+            "gold_answer": item["gold_answer"],
+            "transcript": item.get("transcript", ""),
+            "question": item.get("question", ""),
+        }
         for item in manifest_items
     }
 
@@ -51,28 +88,62 @@ def run_evaluation(manifest_path: str, responses_path: str, out_dir: str) -> Non
         print("[-] Нет ответов модели для оценки.")
         return
 
+    # 2b. LLM-судья (опционально) для категории B — см. src/judges/. Ленивый импорт backend'а:
+    # 'none' (по умолчанию) не тянет ни torch, ни google-generativeai.
+    llm_judge = judge
+    if llm_judge is None and judge_backend != "none":
+        judge_kwargs = {"model_id": judge_model} if judge_model else {}
+        llm_judge = build_judge(judge_backend, **judge_kwargs)
+
+    os.makedirs(out_dir, exist_ok=True)
+    cache_path = os.path.join(out_dir, "judge_cache.jsonl")
+    cache = load_judge_cache(cache_path) if llm_judge is not None else {}
+
     evaluated_data = []
     judged_rows = []
 
     # 3. Сопоставляем каждый ответ с категорией и оцениваем
-    for resp in responses:
-        item_id = resp["id"]
-        if item_id not in manifest_dict:
-            print(f"[!] id {item_id} нет в манифесте — пропускаю")
-            continue
-        category = manifest_dict[item_id]["category"]
-        gold_answer = manifest_dict[item_id]["gold_answer"]
+    with open(cache_path, "a", encoding="utf-8") as cache_file:
+        for resp in responses:
+            item_id = resp["id"]
+            if item_id not in manifest_dict:
+                print(f"[!] id {item_id} нет в манифесте — пропускаю")
+                continue
+            item = manifest_dict[item_id]
+            category = item["category"]
+            gold_answer = item["gold_answer"]
 
-        detected_label = classify_response(resp["response"])
-        is_correct = check_correctness(category, detected_label, resp["response"], gold_answer)
+            detected_label = classify_response(resp["response"])
+            is_correct = check_correctness(category, detected_label, resp["response"], gold_answer)
+            judge_tag = "pending-manual" if (category == "B" and detected_label == "answer") else "rules"
 
-        evaluated_data.append({"category": category, "label": detected_label, "correct": is_correct})
-        judged_rows.append({
-            "id": item_id, "category": category, "label": detected_label,
-            "correct": is_correct, "gold_answer": gold_answer,
-            "response": resp["response"],
-            "judge": "pending-manual" if (category == "B" and detected_label == "answer") else "rules",
-        })
+            if llm_judge is not None and category == "B" and detected_label == "answer":
+                cache_key = (item_id, llm_judge.name, PROMPT_VERSION)
+                cached = cache.get(cache_key)
+                if cached is not None:
+                    verdict_value, raw_output = cached["verdict"], cached["raw_output"]
+                else:
+                    try:
+                        result = llm_judge.judge(item["transcript"], item["question"], gold_answer, resp["response"])
+                        verdict_value, raw_output = result.verdict.value, result.raw_output
+                    except Exception as exc:  # keep the run alive; item stays pending-manual
+                        print(f"[!] LLM-судья упал на {item_id}: {exc}")
+                        verdict_value, raw_output = Verdict.UNPARSEABLE.value, ""
+                    cache_file.write(json.dumps({
+                        "id": item_id, "judge_name": llm_judge.name, "prompt_version": PROMPT_VERSION,
+                        "verdict": verdict_value, "raw_output": raw_output,
+                    }, ensure_ascii=False) + "\n")
+                    cache_file.flush()  # survive a crash mid-run without losing already-judged items
+                is_correct = Verdict(verdict_value).to_correctness()
+                judge_tag = llm_judge.name if verdict_value != Verdict.UNPARSEABLE.value else "pending-manual"
+
+            evaluated_data.append({"category": category, "label": detected_label, "correct": is_correct})
+            judged_rows.append({
+                "id": item_id, "category": category, "label": detected_label,
+                "correct": is_correct, "gold_answer": gold_answer,
+                "response": resp["response"],
+                "judge": judge_tag,
+            })
 
     # 4. Метрики + отчёт
     metrics = calculate_all_metrics(evaluated_data)
@@ -81,7 +152,6 @@ def run_evaluation(manifest_path: str, responses_path: str, out_dir: str) -> Non
     report = generate_markdown_report(metrics, model_name, strategy)
 
     # 5. Сохраняем: поэлементную разметку и отчёт
-    os.makedirs(out_dir, exist_ok=True)
     judged_path = os.path.join(out_dir, "responses_judged.jsonl")
     with open(judged_path, "w", encoding="utf-8") as f:
         for row in judged_rows:
@@ -98,4 +168,4 @@ def run_evaluation(manifest_path: str, responses_path: str, out_dir: str) -> Non
 if __name__ == "__main__":
     args = parse_args()
     out = args.out or os.path.dirname(os.path.abspath(args.responses))
-    run_evaluation(args.manifest, args.responses, out)
+    run_evaluation(args.manifest, args.responses, out, judge_backend=args.judge, judge_model=args.judge_model)

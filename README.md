@@ -126,7 +126,7 @@ The output is WAV, 16 kHz, mono, 16-bit.
 
 ```bash
 pip install -r requirements.txt
-# inference (GPU; or open notebooks/colab_run.ipynb in Colab):
+# inference (GPU; or open notebooks/kaggle_run.ipynb on Kaggle):
 python -m src.inference --model qwen2audio --strategy plain --data data/manifests/pilot.jsonl --out results/
 # evaluation:
 python -m src.run_eval --responses results/<run_id>/responses.jsonl
