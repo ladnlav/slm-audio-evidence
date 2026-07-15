@@ -6,11 +6,12 @@ import torch
 
 from .base import DEFAULT_PROMPT_NAME, LLMJudge
 
-# Same model + quantization already proven on a free Colab T4 as the cascade's text LLM
-# (src/models/cascade.py) — reused for expedience, NOT because it was evaluated as a good
-# judge. First real audit (2026-07-15, 88% vs manual-M1) showed a verbosity bias: long
-# fluent non-answers get marked CORRECT. See docs/decisions.md for the model-choice discussion.
-MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
+# Qwen3-8B (2025 generation) — swapped in 2026-07-15 to isolate the model variable from the
+# judge_v2.txt prompt fix (both address the same verbosity-bias finding; testing them one at a
+# time tells us which one actually helped). Previously Qwen2.5-7B-Instruct, reused from
+# src/models/cascade.py's config for expedience, never evaluated as a judge on its own merits.
+# See docs/decisions.md for the full audit and the reasoning behind this choice.
+MODEL_ID = "Qwen/Qwen3-8B"
 
 
 class LocalHFJudge(LLMJudge):
@@ -41,7 +42,12 @@ class LocalHFJudge(LLMJudge):
 
     def _generate(self, prompt: str) -> str:
         messages = [{"role": "user", "content": prompt}]
-        text = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        # enable_thinking=False: Qwen3 defaults to emitting a <think>...</think> block before
+        # answering, which would blow through max_new_tokens before ever reaching a verdict
+        # word. Harmless no-op kwarg on chat templates that don't recognize it (e.g. Qwen2.5).
+        text = self.tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False, enable_thinking=False
+        )
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
         with torch.no_grad():
             out = self.model.generate(
