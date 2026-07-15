@@ -225,6 +225,34 @@ def test_run_eval_end_to_end() -> int:
     return failures
 
 
+def test_run_eval_subset_ids() -> int:
+    """subset_ids restricts evaluation to a fixed handful of items (src/judges/dev_subset.py)
+    so a prompt/model change can be checked in seconds instead of paying for a full run.
+    """
+    out_dir = Path(tempfile.mkdtemp(prefix="judge_subset_"))
+    failures = 0
+    try:
+        run_evaluation(
+            manifest_path=str(FIXTURES / "manifest.jsonl"),
+            responses_path=str(FIXTURES / "responses.jsonl"),
+            out_dir=str(out_dir),
+            judge_backend="fake",
+            subset_ids={"syn-a1", "syn-b1"},
+        )
+        judged_path = out_dir / "responses_judged.jsonl"
+        ids = {json.loads(l)["id"] for l in judged_path.read_text(encoding="utf-8").splitlines()}
+        checks = {
+            "only the requested subset gets evaluated": ids == {"syn-a1", "syn-b1"},
+            "items outside the subset are skipped entirely, not just unjudged": "syn-c3" not in ids,
+        }
+        for description, ok in checks.items():
+            failures += not ok
+            print(f"  [{'OK' if ok else 'FAIL'}] {description}")
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+    return failures
+
+
 def test_audit_compare_disagreements() -> int:
     """scripts/audit_judge.py compare: agreement count AND the disagreements log
     (both labels side by side) — the part that only had manual, not automated,
@@ -307,6 +335,7 @@ def main() -> None:
         ("prompt versioning (judge_v1 vs judge_v2)", test_prompt_versioning),
         ("build_judge('fake') factory", test_build_judge_fake_backend),
         ("run_eval.py end-to-end (fake backend)", test_run_eval_end_to_end),
+        ("run_eval.py subset_ids filtering", test_run_eval_subset_ids),
         ("audit_judge.py compare + disagreements log", test_audit_compare_disagreements),
     ]
     total_failures = 0

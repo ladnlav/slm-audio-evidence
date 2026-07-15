@@ -21,6 +21,13 @@ def build_judge(backend: str, **kwargs) -> LLMJudge:
         from .local_hf import LocalHFJudge
 
         return LocalHFJudge(**kwargs)
+    if backend == "tiered":
+        # Fast (no-think) pass on everything, slow (thinking) pass only on responses that
+        # look verbosity-bias-prone -- see tiered.py. For 1000+-item datasets, not the ~90-item
+        # pilot (there the plain 'local' thinking judge is affordable and simpler).
+        from .tiered import build_local_tiered_judge
+
+        return build_local_tiered_judge(**kwargs)
     if backend == "gemini":
         from .gemini import GeminiJudge
 
@@ -29,4 +36,4 @@ def build_judge(backend: str, **kwargs) -> LLMJudge:
         from .fake import FakeJudge
 
         return FakeJudge(**kwargs)
-    raise ValueError(f"Unknown judge backend: {backend!r} (expected 'local', 'gemini', or 'fake')")
+    raise ValueError(f"Unknown judge backend: {backend!r} (expected 'local', 'tiered', 'gemini', or 'fake')")

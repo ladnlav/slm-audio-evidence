@@ -67,11 +67,18 @@ def run_evaluation(
     judge_model: str | None = None,
     judge_prompt: str = DEFAULT_PROMPT_NAME,
     judge=None,
+    subset_ids: set[str] | None = None,
 ) -> None:
     """`judge`: an already-built LLMJudge instance, for callers that grade several
     runs in one process (e.g. a Colab cell looping over all pilot runs) and want to
     load the model once instead of once per run. Takes priority over judge_backend/
     judge_model/judge_prompt when given; the CLI entry point below never passes it.
+
+    `subset_ids`: if given, only responses whose id is in this set are evaluated --
+    everything else is skipped. For fast judge-config iteration on a small fixed
+    subset (see src/judges/dev_subset.py) instead of paying for a full run every time
+    a prompt or model changes. Metrics/out files reflect only the subset, not the
+    full run -- not meant to replace a full audit before reporting numbers.
     """
     # 1. Загружаем манифест (там хранятся правильные ответы, транскрипты и категории A/B/C)
     manifest_items = load_jsonl(manifest_path)
@@ -89,6 +96,8 @@ def run_evaluation(
 
     # 2. Загружаем ответы модели
     responses = load_jsonl(responses_path)
+    if subset_ids is not None:
+        responses = [r for r in responses if r["id"] in subset_ids]
     if not responses:
         print("[-] Нет ответов модели для оценки.")
         return
