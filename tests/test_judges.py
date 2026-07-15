@@ -37,6 +37,12 @@ PARSE_CASES = [
     ("Maybe CORRECT or maybe INCORRECT, hard to say.", Verdict.UNPARSEABLE, "two distinct verdicts -> ambiguous"),
     ("The system answer is great.", Verdict.UNPARSEABLE, "no verdict word at all"),
     ("", Verdict.UNPARSEABLE, "empty reply"),
+    ("<think>Is this CORRECT or INCORRECT? Let me check... it matches the gold answer.</think>\nCORRECT",
+     Verdict.CORRECT, "thinking block weighs both words as hypotheses, only text after </think> counts"),
+    ("<think>hmm, could be CORRECT, or maybe INCORRECT, still deciding</think>",
+     Verdict.UNPARSEABLE, "</think> closes but nothing follows it -- genuinely no verdict given"),
+    ("<think>still reasoning about whether this is CORRECT or INCORRECT and never finishes",
+     Verdict.UNPARSEABLE, "</think> never closes (ran out of tokens) -- correctly still ambiguous"),
 ]
 
 

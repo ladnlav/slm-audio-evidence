@@ -66,8 +66,15 @@ def parse_verdict(raw_output: str) -> Verdict:
     """Strict on purpose: an ambiguous reply must surface as UNPARSEABLE (-> pending-manual),
     never get silently guessed. Models rarely reply with exactly one word despite the rubric
     asking for it, so this scans the whole reply and only accepts a single distinct verdict word.
+
+    If a <think>...</think> block is present (Qwen3-style reasoning), only the text after the
+    last </think> is scanned. Found 2026-07-15 (docs/decisions.md, fourth audit): reasoning
+    routinely name-checks multiple verdict words as hypotheses ("is this correct or incorrect?")
+    before settling on one, so scanning the whole reply made 60/93 real thinking-judge replies
+    look ambiguous even though every one of them gave a single clear answer after </think>.
     """
-    matches = {m.group(1) for m in _VERDICT_RE.finditer(raw_output.upper())}
+    text = raw_output.rsplit("</think>", 1)[-1] if "</think>" in raw_output else raw_output
+    matches = {m.group(1) for m in _VERDICT_RE.finditer(text.upper())}
     if len(matches) == 1:
         return Verdict(matches.pop())
     return Verdict.UNPARSEABLE
