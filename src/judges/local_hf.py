@@ -24,13 +24,21 @@ class LocalHFJudge(LLMJudge):
         self,
         model_id: str = MODEL_ID,
         load_in_8bit: bool = True,
-        max_new_tokens: int = 64,
+        max_new_tokens: int = 512,
         prompt_name: str = DEFAULT_PROMPT_NAME,
     ) -> None:
         super().__init__(prompt_name=prompt_name)
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-        self.name = f"llm-{model_id.split('/')[-1].lower()}-v1"
+        # -v2: reasoning enabled (see _generate). Distinct from the old -v1 no-think backend so
+        # judge_cache.jsonl entries never collide across the behavior change (cache key includes
+        # judge_name, see run_eval.py). docs/decisions.md 2026-07-15, judge_v2 verbosity-bias
+        # post-mortem: a one-sentence prompt addition tried to fix over-crediting of long answers
+        # but couldn't -- at max_new_tokens=64 with thinking off, the judge had no room to check
+        # whether the gold facts were actually present, so it started pattern-matching on length
+        # instead (92%->89%). Reverted the prompt to judge_v1.txt; giving the judge room to reason
+        # is the alternative lever, tried here instead of more prompt wording.
+        self.name = f"llm-{model_id.split('/')[-1].lower()}-v2"
         self.max_new_tokens = max_new_tokens
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         kwargs: dict[str, Any] = {"device_map": "auto"}
@@ -42,11 +50,13 @@ class LocalHFJudge(LLMJudge):
 
     def _generate(self, prompt: str) -> str:
         messages = [{"role": "user", "content": prompt}]
-        # enable_thinking=False: Qwen3 defaults to emitting a <think>...</think> block before
-        # answering, which would blow through max_new_tokens before ever reaching a verdict
-        # word. Harmless no-op kwarg on chat templates that don't recognize it (e.g. Qwen2.5).
+        # enable_thinking=True: let Qwen3 emit its native <think>...</think> block before the
+        # verdict word instead of answering cold. Needs max_new_tokens raised well past the old
+        # 64 (thinking runs long) or the reply gets truncated mid-thought with no verdict word at
+        # all, which parse_verdict correctly reports as UNPARSEABLE rather than guessing. Harmless
+        # no-op kwarg on chat templates that don't recognize it (e.g. Qwen2.5).
         text = self.tokenizer.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=False, enable_thinking=False
+            messages, add_generation_prompt=True, tokenize=False, enable_thinking=True
         )
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
         with torch.no_grad():
