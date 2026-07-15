@@ -94,6 +94,17 @@ class LLMJudge(ABC):
         self.prompt_name = prompt_name
         self.prompt_version = _prompt_version(prompt_name)
 
+    def set_prompt(self, prompt_name: str) -> None:
+        """Swap the rubric on an already-built instance instead of constructing a new judge --
+        for a local model, building a new instance means loading a second full copy of the
+        weights onto the GPU. Two int8 8B copies don't both fit on a 16 GB Kaggle GPU (OOM'd in
+        practice, see docs/decisions.md 2026-07-16); reusing one loaded model and swapping its
+        prompt_name/prompt_version (and, for LocalHFJudge, enable_thinking/max_new_tokens) is
+        the only way to A/B a rubric mid-session without restarting.
+        """
+        self.prompt_name = prompt_name
+        self.prompt_version = _prompt_version(prompt_name)
+
     @abstractmethod
     def _generate(self, prompt: str) -> str:
         """Send `prompt` (the rendered rubric) to the backend; return its raw text reply."""

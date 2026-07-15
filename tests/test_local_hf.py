@@ -20,7 +20,7 @@ except ImportError:
     print("[skip] torch not installed -- test_local_hf.py needs it, skipping.")
     sys.exit(0)
 
-from src.judges.local_hf import _StopOnVerdict
+from src.judges.local_hf import LocalHFJudge, _StopOnVerdict
 
 
 class _StubTokenizer:
@@ -59,9 +59,42 @@ def test_stop_on_verdict() -> int:
     return failures
 
 
+class _BareLocalHFJudge:
+    """Just enough of a LocalHFJudge for set_thinking() -- it only touches _model_id/
+    enable_thinking/max_new_tokens/name, never self.model or self.tokenizer, so a real model
+    load isn't needed to test it.
+    """
+
+    _model_id = "Qwen/Qwen3-8B"
+
+
+def test_set_thinking() -> int:
+    checks = {}
+    stub = _BareLocalHFJudge()
+    LocalHFJudge.set_thinking(stub, False)
+    checks["no-think: name gets -v1 suffix"] = stub.name == "llm-qwen3-8b-v1"
+    checks["no-think: default max_new_tokens is 64"] = stub.max_new_tokens == 64
+
+    LocalHFJudge.set_thinking(stub, True)
+    checks["thinking: name gets -v2 suffix"] = stub.name == "llm-qwen3-8b-v2"
+    checks["thinking: default max_new_tokens is 512"] = stub.max_new_tokens == 512
+    checks["thinking: enable_thinking flag set"] = stub.enable_thinking is True
+
+    LocalHFJudge.set_thinking(stub, True, max_new_tokens=256)
+    checks["explicit max_new_tokens overrides the mode default"] = stub.max_new_tokens == 256
+
+    failures = 0
+    for description, ok in checks.items():
+        failures += not ok
+        print(f"  [{'OK' if ok else 'FAIL'}] {description}")
+    return failures
+
+
 def main() -> None:
     print("=== _StopOnVerdict ===")
     failures = test_stop_on_verdict()
+    print("\n=== LocalHFJudge.set_thinking ===")
+    failures += test_set_thinking()
 
     print("\n================ РЕЗУЛЬТАТ ================")
     if failures:

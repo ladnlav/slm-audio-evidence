@@ -7,11 +7,6 @@ from .base import DEFAULT_PROMPT_NAME, JudgeResult, LLMJudge
 # every real disagreement so far involved a response several times longer than gold.
 DEFAULT_LENGTH_RATIO_THRESHOLD = 3.0
 
-# LocalHFJudge's own fast/slow settings (see local_hf.py) -- kept here instead of guessing them
-# from the wrapped judge's current state, so TieredJudge's behavior doesn't depend on whatever
-# mode the judge happened to be constructed with.
-_FAST_MODE = {"enable_thinking": False, "max_new_tokens": 64}
-_SLOW_MODE = {"enable_thinking": True, "max_new_tokens": 512}
 
 
 class TieredJudge(LLMJudge):
@@ -52,14 +47,12 @@ class TieredJudge(LLMJudge):
 
     def judge(self, transcript: str, question: str, gold: str, response: str) -> JudgeResult:
         self.total_count += 1
-        for key, value in _FAST_MODE.items():
-            setattr(self.judge_backend, key, value)
+        self.judge_backend.set_thinking(False)
         result = self.judge_backend.judge(transcript, question, gold, response)
 
         if self._looks_risky(gold, response):
             self.escalated_count += 1
-            for key, value in _SLOW_MODE.items():
-                setattr(self.judge_backend, key, value)
+            self.judge_backend.set_thinking(True)
             result = self.judge_backend.judge(transcript, question, gold, response)
 
         return JudgeResult(verdict=result.verdict, raw_output=result.raw_output, judge_name=self.name)

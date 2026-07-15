@@ -179,6 +179,35 @@ def test_prompt_versioning() -> int:
     return failures
 
 
+def test_set_prompt_reuses_instance() -> int:
+    """set_prompt() must update prompt_name/prompt_version on the SAME instance -- for a local
+    model this is what lets a notebook cell A/B a rubric without loading a second copy of the
+    weights (two int8 8B copies don't fit on a 16 GB GPU; OOM'd for real, docs/decisions.md
+    2026-07-16). No new object, no reload -- just swap the field.
+    """
+    judge = SharedFakeJudge(canned="CORRECT", prompt_name="judge_v1.txt")
+    v1_version = judge.prompt_version
+    before_id = id(judge)
+
+    judge.set_prompt("judge_v3.txt")
+
+    checks = {
+        "same object, not a new instance": id(judge) == before_id,
+        "prompt_name updated": judge.prompt_name == "judge_v3.txt",
+        "prompt_version updated to match the new file": judge.prompt_version != v1_version
+        and judge.prompt_version.startswith("judge_v3.txt@"),
+    }
+    result = judge.judge(transcript="t", question="q", gold="g", response="r")
+    checks[".judge() still works after the swap (renders judge_v3.txt now, not judge_v1.txt)"] = (
+        result.verdict == Verdict.CORRECT
+    )
+    failures = 0
+    for description, ok in checks.items():
+        failures += not ok
+        print(f"  [{'OK' if ok else 'FAIL'}] {description}")
+    return failures
+
+
 def test_build_judge_fake_backend() -> int:
     judge = build_judge("fake", canned="INCORRECT")
     result = judge.judge(transcript="t", question="q", gold="g", response="r")
@@ -366,6 +395,7 @@ def main() -> None:
         ("render_judge_prompt", test_render_judge_prompt),
         ("FakeJudge end-to-end", test_fake_judge_end_to_end),
         ("prompt versioning (judge_v1 vs judge_v2)", test_prompt_versioning),
+        ("set_prompt() reuses the same instance", test_set_prompt_reuses_instance),
         ("build_judge('fake') factory", test_build_judge_fake_backend),
         ("run_eval.py end-to-end (fake backend)", test_run_eval_end_to_end),
         ("run_eval.py subset_ids filtering", test_run_eval_subset_ids),

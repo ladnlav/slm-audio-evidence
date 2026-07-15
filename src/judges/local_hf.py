@@ -62,9 +62,8 @@ class LocalHFJudge(LLMJudge):
         # (enable_thinking=True) is the alternative lever. Both modes stay available -- see
         # src/judges/tiered.py, which runs -v1 on everything and escalates only the
         # verbosity-bias-prone items to -v2, since -v2 is far slower per call.
-        self.enable_thinking = enable_thinking
-        self.name = f"llm-{model_id.split('/')[-1].lower()}-{'v2' if enable_thinking else 'v1'}"
-        self.max_new_tokens = max_new_tokens if max_new_tokens is not None else (512 if enable_thinking else 64)
+        self._model_id = model_id
+        self.set_thinking(enable_thinking, max_new_tokens=max_new_tokens)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         kwargs: dict[str, Any] = {"device_map": "auto"}
         if load_in_8bit:
@@ -72,6 +71,18 @@ class LocalHFJudge(LLMJudge):
         else:
             kwargs["torch_dtype"] = torch.float16
         self.model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+
+    def set_thinking(self, enable_thinking: bool, max_new_tokens: int | None = None) -> None:
+        """Swap generation mode on an already-loaded instance -- keeps enable_thinking,
+        max_new_tokens, and name (the judge_cache.jsonl cache-key component) consistent with
+        each other, instead of setting enable_thinking by hand and leaving a stale name behind
+        (the -v1/-v2 suffix would then no longer match what actually ran). Use this together
+        with LLMJudge.set_prompt() to A/B a rubric+mode on one loaded model without a second
+        weights load -- see docs/decisions.md 2026-07-16 (ad-hoc cell OOM'd loading a second copy).
+        """
+        self.enable_thinking = enable_thinking
+        self.name = f"llm-{self._model_id.split('/')[-1].lower()}-{'v2' if enable_thinking else 'v1'}"
+        self.max_new_tokens = max_new_tokens if max_new_tokens is not None else (512 if enable_thinking else 64)
 
     def _generate(self, prompt: str) -> str:
         messages = [{"role": "user", "content": prompt}]

@@ -18,9 +18,9 @@ from src.judges.tiered import DEFAULT_LENGTH_RATIO_THRESHOLD, TieredJudge
 
 
 class _ModeAwareFake(LLMJudge):
-    """Stands in for LocalHFJudge: exposes enable_thinking/max_new_tokens as plain mutable
-    attributes (what TieredJudge toggles) and answers differently per mode, so a test can
-    tell which pass actually produced the final verdict.
+    """Stands in for LocalHFJudge: implements set_thinking() (what TieredJudge calls between
+    passes) and answers differently per mode, so a test can tell which pass actually produced
+    the final verdict.
     """
 
     def __init__(self) -> None:
@@ -29,6 +29,10 @@ class _ModeAwareFake(LLMJudge):
         self.enable_thinking = False
         self.max_new_tokens = 64
         self.calls: list[bool] = []
+
+    def set_thinking(self, enable_thinking: bool, max_new_tokens: int | None = None) -> None:
+        self.enable_thinking = enable_thinking
+        self.max_new_tokens = max_new_tokens if max_new_tokens is not None else (512 if enable_thinking else 64)
 
     def _generate(self, prompt: str) -> str:
         self.calls.append(self.enable_thinking)
