@@ -135,7 +135,10 @@ def test_prompt_versioning() -> int:
     rendered_v1 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v1.txt")
     rendered_v2 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v2.txt")
     checks["v1 and v2 render different prompt text"] = rendered_v1 != rendered_v2
-    checks["v2 explicitly addresses the verbosity-bias fix (ABSTAINED wording)"] = "apologizing without giving an answer" in rendered_v2
+    checks["v2 adds the verbosity-bias fix as a single trailing sentence, rest byte-identical to v1"] = (
+        "confident-sounding answer that is missing the gold answer's specific facts is still INCORRECT" in rendered_v2
+        and rendered_v2.startswith(rendered_v1)
+    )
     failures = 0
     for description, ok in checks.items():
         failures += not ok
