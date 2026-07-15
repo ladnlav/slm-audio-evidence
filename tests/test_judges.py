@@ -145,6 +145,15 @@ def test_prompt_versioning() -> int:
         "confident-sounding answer that is missing the gold answer's specific facts is still INCORRECT" in rendered_v2
         and rendered_v2.startswith(rendered_v1)
     )
+
+    v3 = SharedFakeJudge(prompt_name="judge_v3.txt")
+    rendered_v3 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v3.txt")
+    checks["v3 prompt_version starts with the filename"] = v3.prompt_version.startswith("judge_v3.txt@")
+    checks["v3 hashes differently from v1 and v2"] = len({v1.prompt_version, v2.prompt_version, v3.prompt_version}) == 3
+    checks["v3 adds the transcript-grounding fix as a single trailing sentence, rest byte-identical to v1"] = (
+        "states a specific fact that is absent from the transcript" in rendered_v3
+        and rendered_v3.startswith(rendered_v1)
+    )
     failures = 0
     for description, ok in checks.items():
         failures += not ok
