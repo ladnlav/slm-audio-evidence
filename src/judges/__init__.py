@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from .base import PROMPT_VERSION, JudgeResult, LLMJudge, Verdict, parse_verdict, render_judge_prompt
+from .base import DEFAULT_PROMPT_NAME, JudgeResult, LLMJudge, Verdict, parse_verdict, render_judge_prompt
 
 __all__ = [
-    "PROMPT_VERSION",
+    "DEFAULT_PROMPT_NAME",
     "JudgeResult",
     "LLMJudge",
     "Verdict",

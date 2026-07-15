@@ -5,11 +5,11 @@ import os
 # Работает и как `python src/run_eval.py`, и как `python -m src.run_eval`
 try:
     from src.judge import classify_response, check_correctness
-    from src.judges import PROMPT_VERSION, Verdict, build_judge
+    from src.judges import DEFAULT_PROMPT_NAME, Verdict, build_judge
     from src.metrics import calculate_all_metrics, generate_markdown_report
 except ImportError:
     from judge import classify_response, check_correctness
-    from judges import PROMPT_VERSION, Verdict, build_judge
+    from judges import DEFAULT_PROMPT_NAME, Verdict, build_judge
     from metrics import calculate_all_metrics, generate_markdown_report
 
 
@@ -27,6 +27,9 @@ def parse_args() -> argparse.Namespace:
                              "'fake' — детерминированная заглушка без GPU/API, для smoke-теста.")
     parser.add_argument("--judge-model", default=None,
                         help="Переопределить модель судьи по умолчанию для выбранного backend.")
+    parser.add_argument("--judge-prompt", default=DEFAULT_PROMPT_NAME,
+                        help=f"Файл рубрики из src/prompts/ (по умолчанию {DEFAULT_PROMPT_NAME}). "
+                             "Смена версии не совместима по кешу со старой — прогонит заново.")
     return parser.parse_args()
 
 
@@ -61,12 +64,13 @@ def run_evaluation(
     out_dir: str,
     judge_backend: str = "none",
     judge_model: str | None = None,
+    judge_prompt: str = DEFAULT_PROMPT_NAME,
     judge=None,
 ) -> None:
     """`judge`: an already-built LLMJudge instance, for callers that grade several
     runs in one process (e.g. a Colab cell looping over all pilot runs) and want to
     load the model once instead of once per run. Takes priority over judge_backend/
-    judge_model when given; the CLI entry point below never passes it.
+    judge_model/judge_prompt when given; the CLI entry point below never passes it.
     """
     # 1. Загружаем манифест (там хранятся правильные ответы, транскрипты и категории A/B/C)
     manifest_items = load_jsonl(manifest_path)
@@ -92,7 +96,9 @@ def run_evaluation(
     # 'none' (по умолчанию) не тянет ни torch, ни google-generativeai.
     llm_judge = judge
     if llm_judge is None and judge_backend != "none":
-        judge_kwargs = {"model_id": judge_model} if judge_model else {}
+        judge_kwargs: dict = {"prompt_name": judge_prompt}
+        if judge_model:
+            judge_kwargs["model_id"] = judge_model
         llm_judge = build_judge(judge_backend, **judge_kwargs)
 
     os.makedirs(out_dir, exist_ok=True)
@@ -118,7 +124,7 @@ def run_evaluation(
             judge_tag = "pending-manual" if (category == "B" and detected_label == "answer") else "rules"
 
             if llm_judge is not None and category == "B" and detected_label == "answer":
-                cache_key = (item_id, llm_judge.name, PROMPT_VERSION)
+                cache_key = (item_id, llm_judge.name, llm_judge.prompt_version)
                 cached = cache.get(cache_key)
                 if cached is not None:
                     verdict_value, raw_output = cached["verdict"], cached["raw_output"]
@@ -130,7 +136,7 @@ def run_evaluation(
                         print(f"[!] LLM-судья упал на {item_id}: {exc}")
                         verdict_value, raw_output = Verdict.UNPARSEABLE.value, ""
                     cache_file.write(json.dumps({
-                        "id": item_id, "judge_name": llm_judge.name, "prompt_version": PROMPT_VERSION,
+                        "id": item_id, "judge_name": llm_judge.name, "prompt_version": llm_judge.prompt_version,
                         "verdict": verdict_value, "raw_output": raw_output,
                     }, ensure_ascii=False) + "\n")
                     cache_file.flush()  # survive a crash mid-run without losing already-judged items
@@ -168,4 +174,7 @@ def run_evaluation(
 if __name__ == "__main__":
     args = parse_args()
     out = args.out or os.path.dirname(os.path.abspath(args.responses))
-    run_evaluation(args.manifest, args.responses, out, judge_backend=args.judge, judge_model=args.judge_model)
+    run_evaluation(
+        args.manifest, args.responses, out,
+        judge_backend=args.judge, judge_model=args.judge_model, judge_prompt=args.judge_prompt,
+    )

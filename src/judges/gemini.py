@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 
-from .base import LLMJudge
+from .base import DEFAULT_PROMPT_NAME, LLMJudge
 
 MODEL_ID = "gemini-2.5-flash"
 
@@ -13,7 +13,8 @@ class GeminiJudge(LLMJudge):
     docs/decisions.md). Needs GEMINI_API_KEY in the environment — never hardcode the key.
     """
 
-    def __init__(self, model_id: str = MODEL_ID, max_retries: int = 3) -> None:
+    def __init__(self, model_id: str = MODEL_ID, max_retries: int = 3, prompt_name: str = DEFAULT_PROMPT_NAME) -> None:
+        super().__init__(prompt_name=prompt_name)
         import google.generativeai as genai
 
         api_key = os.environ.get("GEMINI_API_KEY")

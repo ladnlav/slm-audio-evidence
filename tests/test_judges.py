@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-from src.judges import PROMPT_VERSION, build_judge
+from src.judges import DEFAULT_PROMPT_NAME, build_judge
 from src.judges.base import LLMJudge, Verdict, parse_verdict, render_judge_prompt
 from src.judges.fake import FakeJudge as SharedFakeJudge
 from src.run_eval import run_evaluation
@@ -94,6 +94,7 @@ class FakeJudge(LLMJudge):
     name = "llm-fake-v1"
 
     def __init__(self, canned_reply: str) -> None:
+        super().__init__()
         self.canned_reply = canned_reply
         self.last_prompt: str | None = None
 
@@ -111,6 +112,30 @@ def test_fake_judge_end_to_end() -> int:
         "judge_name tagged": result.judge_name == "llm-fake-v1",
         "prompt was rendered (not raw template)": judge.last_prompt is not None and "{transcript}" not in judge.last_prompt,
     }
+    failures = 0
+    for description, ok in checks.items():
+        failures += not ok
+        print(f"  [{'OK' if ok else 'FAIL'}] {description}")
+    return failures
+
+
+def test_prompt_versioning() -> int:
+    """prompt_version must be filename+content-hash, not just the filename, so an
+    in-place rubric edit can never silently keep matching a stale judge_cache.jsonl
+    entry -- and swapping judge_v1 <-> judge_v2 must actually render different text.
+    """
+    v1 = SharedFakeJudge(prompt_name="judge_v1.txt")
+    v2 = SharedFakeJudge(prompt_name="judge_v2.txt")
+    checks = {
+        "v1 prompt_version starts with the filename": v1.prompt_version.startswith("judge_v1.txt@"),
+        "v2 prompt_version starts with the filename": v2.prompt_version.startswith("judge_v2.txt@"),
+        "v1 and v2 hash differently (different rubric text)": v1.prompt_version != v2.prompt_version,
+        "default prompt_name is judge_v1.txt": DEFAULT_PROMPT_NAME == "judge_v1.txt",
+    }
+    rendered_v1 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v1.txt")
+    rendered_v2 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v2.txt")
+    checks["v1 and v2 render different prompt text"] = rendered_v1 != rendered_v2
+    checks["v2 explicitly addresses the verbosity-bias fix (ABSTAINED wording)"] = "apologizing without giving an answer" in rendered_v2
     failures = 0
     for description, ok in checks.items():
         failures += not ok
@@ -173,7 +198,8 @@ def test_run_eval_end_to_end() -> int:
         cache_checks = {
             "judge_cache.jsonl created": cache_path.exists(),
             "one cache row for the one LLM-judged item (syn-b1)": len(cache_rows) == 1,
-            "cache row carries prompt_version": bool(cache_rows) and cache_rows[0]["prompt_version"] == PROMPT_VERSION,
+            "cache row carries prompt_version (name@hash, so an in-place rubric edit can't stay silently cached)":
+                bool(cache_rows) and cache_rows[0]["prompt_version"].startswith(DEFAULT_PROMPT_NAME + "@"),
         }
         for description, ok in cache_checks.items():
             failures += not ok
@@ -275,6 +301,7 @@ def main() -> None:
         ("Verdict.to_correctness", test_verdict_to_correctness),
         ("render_judge_prompt", test_render_judge_prompt),
         ("FakeJudge end-to-end", test_fake_judge_end_to_end),
+        ("prompt versioning (judge_v1 vs judge_v2)", test_prompt_versioning),
         ("build_judge('fake') factory", test_build_judge_fake_backend),
         ("run_eval.py end-to-end (fake backend)", test_run_eval_end_to_end),
         ("audit_judge.py compare + disagreements log", test_audit_compare_disagreements),

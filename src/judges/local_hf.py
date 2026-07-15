@@ -4,10 +4,12 @@ from typing import Any
 
 import torch
 
-from .base import LLMJudge
+from .base import DEFAULT_PROMPT_NAME, LLMJudge
 
 # Same model + quantization already proven on a free Colab T4 as the cascade's text LLM
-# (src/models/cascade.py) — reusing a known-working config instead of guessing a new one.
+# (src/models/cascade.py) — reused for expedience, NOT because it was evaluated as a good
+# judge. First real audit (2026-07-15, 88% vs manual-M1) showed a verbosity bias: long
+# fluent non-answers get marked CORRECT. See docs/decisions.md for the model-choice discussion.
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
 
 
@@ -17,7 +19,14 @@ class LocalHFJudge(LLMJudge):
     Primary judge backend per project decision (open-source first, docs/decisions.md).
     """
 
-    def __init__(self, model_id: str = MODEL_ID, load_in_8bit: bool = True, max_new_tokens: int = 16) -> None:
+    def __init__(
+        self,
+        model_id: str = MODEL_ID,
+        load_in_8bit: bool = True,
+        max_new_tokens: int = 64,
+        prompt_name: str = DEFAULT_PROMPT_NAME,
+    ) -> None:
+        super().__init__(prompt_name=prompt_name)
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         self.name = f"llm-{model_id.split('/')[-1].lower()}-v1"
