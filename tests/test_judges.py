@@ -154,6 +154,24 @@ def test_prompt_versioning() -> int:
         "states a specific fact that is absent from the transcript" in rendered_v3
         and rendered_v3.startswith(rendered_v1)
     )
+
+    v4 = SharedFakeJudge(prompt_name="judge_v4.txt")
+    v5 = SharedFakeJudge(prompt_name="judge_v5.txt")
+    rendered_v4 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v4.txt")
+    rendered_v5 = render_judge_prompt("t", "q", "g", "r", prompt_name="judge_v5.txt")
+    checks["v4 hashes differently from v1/v2/v3"] = len(
+        {v1.prompt_version, v2.prompt_version, v3.prompt_version, v4.prompt_version}
+    ) == 4
+    checks["v4 = v1 with exactly the TRANSCRIPT line removed, nothing else"] = (
+        rendered_v4 == rendered_v1.replace("TRANSCRIPT: t \n", "", 1)
+    )
+    checks["v5 hashes differently from v1/v2/v3/v4"] = len(
+        {v1.prompt_version, v2.prompt_version, v3.prompt_version, v4.prompt_version, v5.prompt_version}
+    ) == 5
+    checks["v5 = v3 with the TRANSCRIPT line dropped (still mentions 'transcript' in the instruction text)"] = (
+        "TRANSCRIPT:" not in rendered_v5
+        and "states a specific fact that is absent from the transcript" in rendered_v5
+    )
     failures = 0
     for description, ok in checks.items():
         failures += not ok
