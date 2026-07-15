@@ -61,6 +61,11 @@ def load_jsonl(path: Path) -> list[dict]:
     return rows
 
 
+def _truncate(text: str, limit: int = 300) -> str:
+    text = text.replace("\n", " ").strip()
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def cmd_compare(args: argparse.Namespace) -> None:
     """Diff a fresh LLM-judge cache against the committed manual-M1 ground truth.
 
@@ -70,8 +75,15 @@ def cmd_compare(args: argparse.Namespace) -> None:
     (judge == "manual-M1") and fresh verdicts from <run_dir>/<judge-subdir>/judge_cache.jsonl
     — a SEPARATE directory from --judged on purpose, so this never depends on
     (or risks) overwriting the committed manual grades.
+
+    Every item where the LLM verdict and manual-M1 disagree is logged with BOTH
+    labels side by side (disagreements.jsonl, full data; a "## Disagreements"
+    section in the report, human-readable) so a mismatch can be inspected
+    without re-deriving which side said what.
     """
     from src.judges.base import Verdict  # local import: keeps this script runnable without torch/transformers
+
+    manifest = {row["id"]: row for row in load_jsonl(Path(args.manifest))} if args.manifest else {}
 
     rows: list[dict] = []
     for judged_path in sorted(glob.glob(args.judged, recursive=True)):
@@ -87,10 +99,14 @@ def cmd_compare(args: argparse.Namespace) -> None:
             cached = cache.get(row["id"])
             if cached is None:
                 continue  # this id wasn't (re-)judged by the fresh LLM run — skip rather than guess
+            m = manifest.get(row["id"], {})
             rows.append({
-                "run_id": run_id, "id": row["id"],
+                "run_id": run_id, "id": row["id"], "category": row["category"],
+                "question": m.get("question", ""),
+                "gold_answer": row["gold_answer"], "response": row["response"],
                 "human_correct": row["correct"],
-                "llm_verdict": cached["verdict"], "judge_name": cached["judge_name"],
+                "llm_verdict": cached["verdict"], "llm_raw_output": cached["raw_output"],
+                "judge_name": cached["judge_name"],
             })
 
     if not rows:
@@ -105,13 +121,17 @@ def cmd_compare(args: argparse.Namespace) -> None:
     agree = 0
     unparseable = 0
     confusion: Counter = Counter()
+    disagreements: list[dict] = []
     for r in rows:
         llm_correct = Verdict(r["llm_verdict"]).to_correctness()
         if llm_correct is None:  # UNPARSEABLE — excluded from the agreement ratio, reported separately
             unparseable += 1
             continue
         confusion[(r["human_correct"], r["llm_verdict"])] += 1
-        agree += llm_correct == r["human_correct"]
+        if llm_correct == r["human_correct"]:
+            agree += 1
+        else:
+            disagreements.append(r)
 
     scored = len(rows) - unparseable
     pct = 100 * agree / scored if scored else 0.0
@@ -132,12 +152,32 @@ def cmd_compare(args: argparse.Namespace) -> None:
     if unparseable:
         lines.append(f"\n{unparseable} item(s) the judge answered ambiguously (UNPARSEABLE) — not counted either way.")
 
+    lines.append(f"\n## Disagreements ({len(disagreements)} of {scored})")
+    if disagreements:
+        lines.append("manual-M1 label and LLM verdict side by side, for a quick look at who is likely wrong:\n")
+        for r in disagreements:
+            human_label = "correct" if r["human_correct"] else "incorrect"
+            lines.append(f"### {r['id']} — {r['run_id']} (category {r['category']})")
+            if r["question"]:
+                lines.append(f"- Question: {_truncate(r['question'])}")
+            lines.append(f"- Gold: {_truncate(r['gold_answer'])}")
+            lines.append(f"- Response: {_truncate(r['response'])}")
+            lines.append(f"- **Human (manual-M1): {human_label}** vs **LLM ({r['judge_name']}): {r['llm_verdict']}**")
+            if r["llm_raw_output"] != r["llm_verdict"]:
+                lines.append(f"  (raw judge output: {_truncate(r['llm_raw_output'], 150)})")
+            lines.append("")
+
     report = "\n".join(lines)
     print(report)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "compare_manual_m1.md").write_text(report + "\n", encoding="utf-8")
-    print(f"\nWritten -> {out_dir / 'compare_manual_m1.md'} (paste the % into metrics.md / the results slide).")
+    disagreements_path = out_dir / "disagreements.jsonl"
+    with disagreements_path.open("w", encoding="utf-8") as f:
+        for r in disagreements:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print(f"\nWritten -> {out_dir / 'compare_manual_m1.md'} (paste the % into metrics.md / the results slide)")
+    print(f"          -> {disagreements_path} ({len(disagreements)} rows, full text, for closer inspection)")
 
 
 def cmd_sample(args: argparse.Namespace) -> None:
@@ -250,6 +290,7 @@ def main() -> None:
     p_compare = sub.add_parser("compare", help="Compare a fresh LLM-judge cache against existing manual-M1 ground truth (preferred; no blind resampling).")
     p_compare.add_argument("--judged", required=True, help="Glob for the COMMITTED responses_judged.jsonl files, e.g. 'results/*/responses_judged.jsonl'.")
     p_compare.add_argument("--judge-subdir", default="llm_audit", help="Subdirectory under each run dir holding the fresh judge_cache.jsonl (default: llm_audit; must match the --out used for the audit run).")
+    p_compare.add_argument("--manifest", default="data/manifests/pilot.jsonl", help="Adds the question text to disagreement rows; pass '' to skip.")
     p_compare.add_argument("--out", default="results/judge_audit")
     p_compare.set_defaults(func=cmd_compare)
 

@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from src.judges import PROMPT_VERSION, build_judge
 from src.judges.base import LLMJudge, Verdict, parse_verdict, render_judge_prompt
@@ -193,6 +196,79 @@ def test_run_eval_end_to_end() -> int:
     return failures
 
 
+def test_audit_compare_disagreements() -> int:
+    """scripts/audit_judge.py compare: agreement count AND the disagreements log
+    (both labels side by side) — the part that only had manual, not automated,
+    coverage until a real Kaggle run surfaced actual judge failure modes.
+    """
+    out_dir = Path(tempfile.mkdtemp(prefix="audit_compare_"))
+    failures = 0
+    try:
+        run_dir = out_dir / "results" / "fake_run"
+        (run_dir / "llm_audit").mkdir(parents=True)
+
+        # 4 manual-M1 ground-truth rows: 2 the judge will agree with, 2 it will get wrong.
+        judged_rows = [
+            {"id": "x1", "category": "B", "label": "answer", "correct": True,
+             "gold_answer": "g1", "response": "r1", "judge": "manual-M1"},
+            {"id": "x2", "category": "B", "label": "answer", "correct": False,
+             "gold_answer": "g2", "response": "r2", "judge": "manual-M1"},
+            {"id": "x3", "category": "B", "label": "answer", "correct": True,
+             "gold_answer": "g3", "response": "r3", "judge": "manual-M1"},  # judge will say INCORRECT -> disagree
+            {"id": "x4", "category": "B", "label": "answer", "correct": False,
+             "gold_answer": "g4", "response": "r4", "judge": "manual-M1"},  # judge will say CORRECT -> disagree
+        ]
+        with (run_dir / "responses_judged.jsonl").open("w", encoding="utf-8") as f:
+            for row in judged_rows:
+                f.write(json.dumps(row) + "\n")
+
+        cache_rows = [
+            {"id": "x1", "judge_name": "llm-fake-v1", "prompt_version": "judge_v1.txt", "verdict": "CORRECT", "raw_output": "CORRECT"},
+            {"id": "x2", "judge_name": "llm-fake-v1", "prompt_version": "judge_v1.txt", "verdict": "INCORRECT", "raw_output": "INCORRECT"},
+            {"id": "x3", "judge_name": "llm-fake-v1", "prompt_version": "judge_v1.txt", "verdict": "INCORRECT", "raw_output": "well, INCORRECT I think"},
+            {"id": "x4", "judge_name": "llm-fake-v1", "prompt_version": "judge_v1.txt", "verdict": "CORRECT", "raw_output": "CORRECT"},
+        ]
+        with (run_dir / "llm_audit" / "judge_cache.jsonl").open("w", encoding="utf-8") as f:
+            for row in cache_rows:
+                f.write(json.dumps(row) + "\n")
+
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "audit_judge.py"), "compare",
+             "--judged", str(run_dir / "responses_judged.jsonl"),
+             "--manifest", "",  # no manifest -- question text is optional enrichment
+             "--out", str(out_dir / "judge_audit")],
+            capture_output=True, text=True, cwd=str(REPO_ROOT),
+        )
+        ok = result.returncode == 0
+        failures += not ok
+        print(f"  [{'OK' if ok else 'FAIL'}] compare exits 0 (stderr: {result.stderr[-300:] if not ok else ''})")
+
+        report = (out_dir / "judge_audit" / "compare_manual_m1.md").read_text(encoding="utf-8")
+        checks = {
+            "agreement is 2/4 = 50%": "2/4 = 50%" in report,
+            "flags below the 80% gate": "BELOW 80% GATE" in report,
+            "disagreement section header": "## Disagreements (2 of 4)" in report,
+            "x3 disagreement logged (human correct, llm incorrect)": "### x3" in report and "Human (manual-M1): correct" in report,
+            "x4 disagreement logged (human incorrect, llm correct)": "### x4" in report,
+            "x1/x2 (agreements) NOT in disagreements": "### x1" not in report and "### x2" not in report,
+        }
+        for description, ok in checks.items():
+            failures += not ok
+            print(f"  [{'OK' if ok else 'FAIL'}] {description}")
+
+        disagreements = [json.loads(l) for l in (out_dir / "judge_audit" / "disagreements.jsonl").read_text(encoding="utf-8").splitlines()]
+        dis_checks = {
+            "disagreements.jsonl has exactly 2 rows": len(disagreements) == 2,
+            "each row carries both labels": all("human_correct" in r and "llm_verdict" in r for r in disagreements),
+        }
+        for description, ok in dis_checks.items():
+            failures += not ok
+            print(f"  [{'OK' if ok else 'FAIL'}] {description}")
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+    return failures
+
+
 def main() -> None:
     suites = [
         ("parse_verdict", test_parse_verdict),
@@ -201,6 +277,7 @@ def main() -> None:
         ("FakeJudge end-to-end", test_fake_judge_end_to_end),
         ("build_judge('fake') factory", test_build_judge_fake_backend),
         ("run_eval.py end-to-end (fake backend)", test_run_eval_end_to_end),
+        ("audit_judge.py compare + disagreements log", test_audit_compare_disagreements),
     ]
     total_failures = 0
     for name, suite in suites:
