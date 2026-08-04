@@ -118,8 +118,8 @@ def run_evaluation(
         print("[-] Нет ответов модели для оценки.")
         return
 
-    # 2b. LLM-судья (опционально) для категории B — см. src/judges/. Ленивый импорт backend'а:
-    # 'none' (по умолчанию) не тянет ни torch, ни google-generativeai.
+    # 2b. LLM-судья (опционально) для отвечаемых категорий A и B — см. src/judges/.
+    # Ленивый импорт backend'а: 'none' (по умолчанию) не тянет ни torch, ни google-generativeai.
     llm_judge = judge
     if llm_judge is None and judge_backend != "none":
         judge_kwargs: dict = {"prompt_name": judge_prompt}
@@ -154,9 +154,18 @@ def run_evaluation(
 
             detected_label = classify_response(resp["response"])
             is_correct = check_correctness(category, detected_label, resp["response"], gold_answer)
+            rules_correct = is_correct  # kept as the fallback if the judge reply won't parse
             judge_tag = "pending-manual" if (category == "B" and detected_label == "answer") else "rules"
 
-            if llm_judge is not None and category == "B" and detected_label == "answer":
+            # Both answerable categories need semantic judging, not just B:
+            #   B -- the answer is inferred, so it is never a verbatim match;
+            #   A -- paraphrases ("oxygen therapy" vs gold "oxygen supplementation"), numbers
+            #        spelled out ("thirty-two degrees" vs "32 °C") and reworded dates make
+            #        fuzz.partial_ratio produce false negatives.
+            # C is deliberately excluded: there the only thing that matters is the answer/abstain
+            # label from the rules classifier -- any substantive answer is a hallucination
+            # regardless of its content, so there is nothing for a judge to compare against.
+            if llm_judge is not None and category in ("A", "B") and detected_label == "answer":
                 cache_key = (item_id, llm_judge.name, llm_judge.prompt_version)
                 cached = cache.get(cache_key)
                 if cached is not None:
@@ -182,8 +191,15 @@ def run_evaluation(
                         "verdict": verdict_value, "raw_output": raw_output,
                     }, ensure_ascii=False) + "\n")
                     cache_file.flush()  # survive a crash mid-run without losing already-judged items
-                is_correct = Verdict(verdict_value).to_correctness()
-                judge_tag = llm_judge.name if verdict_value != Verdict.UNPARSEABLE.value else "pending-manual"
+                if verdict_value == Verdict.UNPARSEABLE.value:
+                    # Don't lose the item: A falls back to the fuzzy verdict (still a usable
+                    # signal), B stays None -> "pending-manual" exactly as before this branch
+                    # existed, because for B there is no rules-based verdict to fall back to.
+                    is_correct = rules_correct
+                    judge_tag = "rules" if category == "A" else "pending-manual"
+                else:
+                    is_correct = Verdict(verdict_value).to_correctness()
+                    judge_tag = llm_judge.name
 
             evaluated_data.append({"category": category, "label": detected_label, "correct": is_correct})
             judged_rows.append({
