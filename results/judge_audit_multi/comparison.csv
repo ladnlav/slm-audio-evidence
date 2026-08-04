@@ -1,0 +1,8 @@
+judge_name,model_id,backend,thinking,agreement_pct,agree,scored,unparseable,n_disagreements,seconds,sec_per_item,thinking_traces_written
+llm-gemma-4-12b-it-v1,/kaggle/input/datasets/pasheviakova/llm-gemma-4-12b-it-v1-flat-cache,local,False,95.7,89,93,0,4,157.69994711875916,1.7,0
+llm-qwen3-8b-v1,/kaggle/input/datasets/pasheviakova/qwen3-8b-flat-cache,local,False,94.6,88,93,0,5,101.47672605514526,1.09,0
+llm-qwen3.6-27b-v1,/kaggle/input/datasets/pasheviakova/llm-qwen3-6-27b-v1-flat-cache,local,False,94.6,88,93,0,5,287.58755707740784,3.09,0
+llm-ministral-3-8b-instruct-2512-bf16-v1,/kaggle/input/datasets/pasheviakova/llm-ministral-3-8b-instruct-2512-v1-flat-cache,local,False,92.5,86,93,0,7,184.87864327430725,1.99,0
+llm-qwen3.5-9b-v1,/kaggle/input/datasets/pasheviakova/llm-qwen3-5-9b-v1-flat-cache,local,False,92.5,86,93,0,7,175.33941054344177,1.89,0
+llm-qwen3-8b-v1_geval_v1,/kaggle/input/datasets/pasheviakova/qwen3-8b-flat-cache,local,False,88.2,82,93,0,11,1467.1132345199585,15.78,0
+llm-ministral-3-8b-instruct-2512-bf16-v1_geval_v1,/kaggle/input/datasets/pasheviakova/llm-ministral-3-8b-instruct-2512-v1-flat-cache,local,False,83.9,78,93,0,15,4877.1715524196625,52.44,0

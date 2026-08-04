@@ -5,7 +5,12 @@ miniaudio>=1.61
 pyarrow>=23.0.1
 # Modeling & evaluation deps (M1/M3) — pin exact versions before the Jul 12 tag
 torch
-transformers>=4.44
+# >=5.14.1: Gemma-4/Qwen3.5/Qwen3.6 checkpoints (gemma4_unified, qwen3_5) need this floor --
+# verified empirically 2026-07-23 (pip show + AutoConfig.from_pretrained on Kaggle, see
+# docs/decisions.md). NOTE: on Kaggle, bumping this in an already-warm kernel does nothing until
+# Run -> Restart session -- pip upgrades the on-disk package, but a kernel that already imported
+# transformers (e.g. from an earlier candidate cell) keeps the old module in sys.modules.
+transformers>=5.14.1
 accelerate
 bitsandbytes
 soundfile
@@ -14,3 +19,4 @@ pandas
 matplotlib
 jsonlines
 rapidfuzz
+google-generativeai  # LLM-judge Gemini fallback only (src/judges/gemini.py) — local backend needs none of this

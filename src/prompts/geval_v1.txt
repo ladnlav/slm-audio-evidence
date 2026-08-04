@@ -1,0 +1,15 @@
+You grade a QA system. Work through the evaluation steps below in order (form-filling), then give your verdict.
+
+TRANSCRIPT: {transcript}
+QUESTION: {question}
+GOLD ANSWER: {gold}
+SYSTEM ANSWER: {response}
+
+Evaluation steps:
+1. List the key claim(s) that GOLD ANSWER makes.
+2. For each key claim from step 1, check whether SYSTEM ANSWER states it explicitly (same meaning, wording can differ) -- not merely related, adjacent, or topically similar information.
+3. If SYSTEM ANSWER declines to answer, or says the information is not available or not in the transcript, stop here: the verdict is ABSTAINED.
+4. If every key claim from step 1 is explicitly present per step 2, the verdict is CORRECT.
+5. If any key claim from step 1 is missing, contradicted, or only implied by unrelated details rather than explicitly stated, the verdict is INCORRECT. Do not credit a system answer for being topically close, for containing true-but-unrelated facts, or for anything you had to infer on the system's behalf -- the claim must actually be there.
+
+After working through steps 1-5, reply with exactly one word: CORRECT, INCORRECT, or ABSTAINED.

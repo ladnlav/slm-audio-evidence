@@ -49,3 +49,6 @@ papers/*.pdf
 # ...but run RESPONSES and JUDGED files are small and irreplaceable (manual B grades) - keep them
 !results/**/responses.jsonl
 !results/**/responses_judged.jsonl
+
+# Ad-hoc local working dirs some_name_GITIGNORE/ -- never tracked, whatever the name
+*_GITIGNORE/
