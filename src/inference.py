@@ -38,6 +38,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out", default=Path("results"), type=Path, help="Output root directory.")
     p.add_argument("--limit", type=int, default=None, help="Only the first N items (smoke tests).")
     p.add_argument("--no-8bit", action="store_true", help="Load in fp16 instead of int8.")
+    p.add_argument("--samples", type=int, default=S4_SAMPLES,
+                   help=f"s4_consistency only: how many answers to sample per item (default {S4_SAMPLES}). "
+                        "A2 soft targets need 10 -- see PLAN.md section 3 step 2.")
+    p.add_argument("--temperature", type=float, default=S4_GEN_KWARGS["temperature"],
+                   help=f"s4_consistency only: sampling temperature (default {S4_GEN_KWARGS['temperature']}). "
+                        "A2 soft targets need 1.0: the unbiasedness proof of paper 24 is stated for the "
+                        "model's own distribution, and any other temperature estimates the error rate of a "
+                        "different distribution than the one we deploy.")
     return p.parse_args()
 
 
@@ -99,9 +107,10 @@ def main() -> None:
         for n, item in enumerate(todo, 1):
             t0 = time.perf_counter()
             if args.strategy == "s4_consistency":
+                gen_kwargs = {**S4_GEN_KWARGS, "temperature": args.temperature}
                 samples = [
-                    model.answer(item["audio_path"], item["question"], prompt_template, dict(S4_GEN_KWARGS))
-                    for _ in range(S4_SAMPLES)
+                    model.answer(item["audio_path"], item["question"], prompt_template, dict(gen_kwargs))
+                    for _ in range(args.samples)
                 ]
                 response = samples[0]
             else:
