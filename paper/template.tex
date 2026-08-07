@@ -1,11 +1,21 @@
 \documentclass{zapiski}
-\originfo{529}{}{}{2023}
-\setcounter{page}{177}
-\date{12 îêòÿáðÿ 2023 ã.}
+\originfo{1}{}{}{2026}
+\setcounter{page}{1}
+\date{}
 
-\usepackage[cp1251]{inputenc}
+\usepackage[utf8]{inputenc}
 \usepackage[T2A]{fontenc}
 \usepackage[russian, english]{babel}
+
+% Fix the incorrectly decoded Russian masthead from zapiski.cls
+\renewcommand{\publnamef}{%
+  \hbox{\foreignlanguage{russian}{Записки научных}}}
+
+\renewcommand{\publnames}{%
+  \hbox{\foreignlanguage{russian}{семинаров ПОМИ}}}
+
+\renewcommand{\russianvolinfo}{%
+  \hbox{\foreignlanguage{russian}{Том~\origvolume, \origyear~г.}}}
 
 \usepackage{times}
 \usepackage{url}
@@ -113,7 +123,7 @@ Your description will likely be including a table. Tab.~\ref{tab:ocr} is a sampl
 \emph{Tesseract}\newline  \cite{smith2007overview} & 
 Maybe all that raven
 wants is to wet its
-beak in acold glass of milk.
+beak in a cold glass of milk.
 poe mea lo EISsTo) aU eg
 \\\hline
 EAST+\newline\emph{Tesseract}\newline\cite{kopeykina2019automatic} & 

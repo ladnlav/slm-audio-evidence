@@ -52,3 +52,13 @@ papers/*.pdf
 
 # Ad-hoc local working dirs some_name_GITIGNORE/ -- never tracked, whatever the name
 *_GITIGNORE/
+
+# LaTeX build artifacts -- the PDF is produced from paper/*.tex, never edited by hand.
+paper/*.pdf
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
