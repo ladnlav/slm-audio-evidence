@@ -108,7 +108,10 @@ def test_end_to_end_with_fake_model() -> int:
         proc = subprocess.run(
             [sys.executable, "scripts/capture_representations.py", "--manifest", str(manifest),
              "--out", str(out), "--layers", "8", "16", "--fake", "--full-for", "2"],
-            cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
+            cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            # errors="replace": a traceback from the child carries the script path, and
+            # on Windows that path may hold non-ASCII bytes in the console codepage.
+            # Strict decoding then raises and hides what the test was checking.
         )
         if proc.returncode != 0:
             print(proc.stdout[-1500:], proc.stderr[-1500:])
@@ -144,7 +147,10 @@ def test_layer_out_of_range_is_rejected() -> int:
         proc = subprocess.run(
             [sys.executable, "scripts/capture_representations.py", "--manifest", str(manifest),
              "--out", str(tmp / "o"), "--layers", "99", "--fake"],
-            cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
+            cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            # errors="replace": a traceback from the child carries the script path, and
+            # on Windows that path may hold non-ASCII bytes in the console codepage.
+            # Strict decoding then raises and hides what the test was checking.
         )
         return _check([
             (proc.returncode != 0, "exits non-zero"),

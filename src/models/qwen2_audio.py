@@ -27,12 +27,38 @@ class Qwen2AudioModel(SpeechQAModel):
         self.model = Qwen2AudioForConditionalGeneration.from_pretrained(MODEL_ID, **kwargs)
         self.sample_rate = int(self.processor.feature_extractor.sampling_rate)  # 16000
 
+    # Keys under which the processor returns the encoded waveform. If none of these is
+    # present, the batch is text-only however plausible the generated answers look.
+    AUDIO_FEATURE_KEYS = ("input_features", "audio_values", "input_audio_features")
+
     def _pack_inputs(self, text: str, audio) -> dict[str, Any]:
-        # transformers renamed the processor kwarg across versions (audios= -> audio=).
-        try:
-            return self.processor(text=text, audios=[audio], return_tensors="pt", padding=True)
-        except TypeError:
-            return self.processor(text=text, audio=[audio], return_tensors="pt", padding=True)
+        """Encode text + waveform, verifying the audio actually made it into the batch.
+
+        transformers renamed this kwarg across versions (``audios=`` -> ``audio=``). The
+        obvious probe -- pass the old name and catch TypeError -- is wrong on 5.x: the
+        processor does not raise, it logs "Keyword argument `audios` is not a valid
+        argument for this processor and will be ignored" and returns a text-only batch.
+        The model then answers from the question alone and produces fluent, entirely
+        ungrounded output that no downstream metric flags as broken. So we try each name
+        and require audio features in the result, failing loudly when there are none.
+        """
+        last_error: Exception | None = None
+        for kwarg in ("audio", "audios"):
+            try:
+                inputs = self.processor(
+                    text=text, **{kwarg: [audio]}, return_tensors="pt", padding=True
+                )
+            except TypeError as exc:  # genuinely unsupported name on this version
+                last_error = exc
+                continue
+            if any(key in inputs for key in self.AUDIO_FEATURE_KEYS):
+                return inputs
+        raise RuntimeError(
+            "Qwen2-Audio processor returned no audio features under either 'audio' or "
+            "'audios'; the batch would be text-only and every result silently ungrounded. "
+            f"Processor: {type(self.processor).__name__}, transformers may have renamed "
+            f"the argument again. Last TypeError: {last_error}"
+        )
 
     def answer(self, audio_path, question, prompt_template, gen_kwargs=None):
         gen_kwargs = {"max_new_tokens": 256, "do_sample": False, **(gen_kwargs or {})}
