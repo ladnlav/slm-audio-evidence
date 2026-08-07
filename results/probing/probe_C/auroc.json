@@ -1,0 +1,167 @@
+{
+  "rows": [
+    {
+      "features": "layer_16_last",
+      "auroc_overall": 0.7733333333333333,
+      "auroc_within_c": 0.7733333333333333,
+      "ci_within_c": [
+        0.6714958592132505,
+        0.8630029809031421
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_32_last",
+      "auroc_overall": 0.7708571428571429,
+      "auroc_within_c": 0.7708571428571429,
+      "ci_within_c": [
+        0.6610590745274038,
+        0.8650838099946229
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_32_mean_text",
+      "auroc_overall": 0.7472380952380953,
+      "auroc_within_c": 0.7472380952380953,
+      "ci_within_c": [
+        0.6155911477869468,
+        0.8602557717098325
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_24_last",
+      "auroc_overall": 0.7331428571428571,
+      "auroc_within_c": 0.7331428571428571,
+      "ci_within_c": [
+        0.6096653746770027,
+        0.8440013645224171
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_8_mean_text",
+      "auroc_overall": 0.7087619047619048,
+      "auroc_within_c": 0.7087619047619048,
+      "ci_within_c": [
+        0.5674695902488979,
+        0.8318719170430123
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_32_mean_all",
+      "auroc_overall": 0.7074285714285714,
+      "auroc_within_c": 0.7074285714285714,
+      "ci_within_c": [
+        0.597707275275187,
+        0.8121899861852291
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_24_mean_all",
+      "auroc_overall": 0.6982857142857143,
+      "auroc_within_c": 0.6982857142857143,
+      "ci_within_c": [
+        0.5749888203147617,
+        0.8100470896380507
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_16_mean_text",
+      "auroc_overall": 0.6977142857142857,
+      "auroc_within_c": 0.6977142857142857,
+      "ci_within_c": [
+        0.5484003281378179,
+        0.8335946132199255
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_24_mean_text",
+      "auroc_overall": 0.6946666666666667,
+      "auroc_within_c": 0.6946666666666667,
+      "ci_within_c": [
+        0.5483831385183043,
+        0.8252666119770303
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_8_last",
+      "auroc_overall": 0.58,
+      "auroc_within_c": 0.58,
+      "ci_within_c": [
+        0.4247867780346696,
+        0.7344861464448794
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_16_mean_audio",
+      "auroc_overall": 0.5678095238095238,
+      "auroc_within_c": 0.5678095238095238,
+      "ci_within_c": [
+        0.4651500904965237,
+        0.6752318833336841
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_16_mean_all",
+      "auroc_overall": 0.5546666666666666,
+      "auroc_within_c": 0.5546666666666666,
+      "ci_within_c": [
+        0.4368265776477044,
+        0.6737242812286827
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_24_mean_audio",
+      "auroc_overall": 0.5392380952380952,
+      "auroc_within_c": 0.5392380952380952,
+      "ci_within_c": [
+        0.41672617680378143,
+        0.6628349823198864
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_32_mean_audio",
+      "auroc_overall": 0.484,
+      "auroc_within_c": 0.484,
+      "ci_within_c": [
+        0.35853756393986347,
+        0.6119978239035823
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_8_mean_all",
+      "auroc_overall": 0.4660952380952381,
+      "auroc_within_c": 0.4660952380952381,
+      "ci_within_c": [
+        0.36842005012531326,
+        0.5674517665130568
+      ],
+      "n_items": 235
+    },
+    {
+      "features": "layer_8_mean_audio",
+      "auroc_overall": 0.31866666666666665,
+      "auroc_within_c": 0.31866666666666665,
+      "ci_within_c": [
+        0.22434883653597743,
+        0.41790920752187133
+      ],
+      "n_items": 235
+    }
+  ],
+  "threshold": 0.5,
+  "folds": 5,
+  "n_passages": 51
+}

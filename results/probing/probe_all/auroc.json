@@ -1,0 +1,103 @@
+{
+  "rows": [
+    {
+      "features": "layer_16_mean_text",
+      "auroc_overall": 0.7724858088212974,
+      "auroc_within_c": 0.6091428571428571,
+      "n_items": 376
+    },
+    {
+      "features": "layer_16_last",
+      "auroc_overall": 0.7624077952827611,
+      "auroc_within_c": 0.616,
+      "n_items": 376
+    },
+    {
+      "features": "layer_24_mean_text",
+      "auroc_overall": 0.7372734723613514,
+      "auroc_within_c": 0.6626666666666666,
+      "n_items": 376
+    },
+    {
+      "features": "layer_24_last",
+      "auroc_overall": 0.721245788179583,
+      "auroc_within_c": 0.48495238095238097,
+      "n_items": 376
+    },
+    {
+      "features": "layer_32_last",
+      "auroc_overall": 0.7065840998087606,
+      "auroc_within_c": 0.4481904761904762,
+      "n_items": 376
+    },
+    {
+      "features": "layer_32_mean_text",
+      "auroc_overall": 0.6854263424703275,
+      "auroc_within_c": 0.6647619047619048,
+      "n_items": 376
+    },
+    {
+      "features": "layer_8_mean_text",
+      "auroc_overall": 0.6489997875117628,
+      "auroc_within_c": 0.7057142857142857,
+      "n_items": 376
+    },
+    {
+      "features": "layer_8_last",
+      "auroc_overall": 0.6164283762863128,
+      "auroc_within_c": 0.634095238095238,
+      "n_items": 376
+    },
+    {
+      "features": "layer_16_mean_all",
+      "auroc_overall": 0.5770269860061318,
+      "auroc_within_c": 0.6756190476190476,
+      "n_items": 376
+    },
+    {
+      "features": "layer_8_mean_all",
+      "auroc_overall": 0.5471875664025742,
+      "auroc_within_c": 0.5984761904761905,
+      "n_items": 376
+    },
+    {
+      "features": "layer_24_mean_all",
+      "auroc_overall": 0.5407825638223598,
+      "auroc_within_c": 0.6268571428571429,
+      "n_items": 376
+    },
+    {
+      "features": "layer_32_mean_all",
+      "auroc_overall": 0.5119752299426282,
+      "auroc_within_c": 0.5807619047619048,
+      "n_items": 376
+    },
+    {
+      "features": "layer_8_mean_audio",
+      "auroc_overall": 0.4990134474698722,
+      "auroc_within_c": 0.4678095238095238,
+      "n_items": 376
+    },
+    {
+      "features": "layer_16_mean_audio",
+      "auroc_overall": 0.49830009410193365,
+      "auroc_within_c": 0.5030476190476191,
+      "n_items": 376
+    },
+    {
+      "features": "layer_32_mean_audio",
+      "auroc_overall": 0.48207509941413956,
+      "auroc_within_c": 0.43485714285714283,
+      "n_items": 376
+    },
+    {
+      "features": "layer_24_mean_audio",
+      "auroc_overall": 0.4593692134899675,
+      "auroc_within_c": 0.432952380952381,
+      "n_items": 376
+    }
+  ],
+  "threshold": 0.5,
+  "folds": 5,
+  "n_passages": 51
+}

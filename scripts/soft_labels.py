@@ -75,7 +75,13 @@ def grade_sample(
     correct = check_correctness(category, label, response, gold_answer)
     judge_verdict_raw = None
 
-    if judge is not None and category == "B" and label == "answer":
+    # Both answerable categories go to the judge, not just B -- the same scope defect
+    # that src/run_eval.py carried until 2026-07-31 (commit ea40188). It matters more
+    # here: incorrect() turns a wrongly-graded A answer into a "hallucination" in the
+    # probe's training signal, so a paraphrase the fuzzy matcher misses would teach the
+    # probe that a correct answer was a fabrication. C is excluded by design, since there
+    # only the label counts and any substantive answer is a hallucination regardless.
+    if judge is not None and category in ("A", "B") and label == "answer":
         cache_key = (item_id, sample_idx, judge.name, judge.prompt_version)
         cached = cache.get(cache_key)
         if cached is not None:

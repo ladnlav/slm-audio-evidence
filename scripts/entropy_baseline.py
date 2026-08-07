@@ -147,6 +147,33 @@ def cmd_compute(args: argparse.Namespace) -> None:
     print(f"[+] {len(rows)} items -> {out_path}")
 
 
+def bootstrap_ci(scores: list[float], labels: list[int], n: int, seed: int,
+                 alpha: float = 0.05) -> tuple[float, float] | None:
+    """Percentile bootstrap over items, matching scripts/train_probe.py.
+
+    Resamples items rather than each class separately, so the interval reflects how few
+    negatives a rerun of this experiment might contain -- the dominant source of
+    uncertainty when the model behaves the same way on almost every item.
+    """
+    import random
+
+    if n <= 0 or not (0 < sum(labels) < len(labels)):
+        return None
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(n):
+        idx = [rng.randrange(len(labels)) for _ in range(len(labels))]
+        a = auroc([scores[i] for i in idx], [labels[i] for i in idx])
+        if a is not None:
+            vals.append(a)
+    if not vals:
+        return None
+    vals.sort()
+    lo = vals[int(len(vals) * alpha / 2)]
+    hi = vals[min(len(vals) - 1, int(len(vals) * (1 - alpha / 2)))]
+    return lo, hi
+
+
 def cmd_auroc(args: argparse.Namespace) -> None:
     entropy_rows = {row["id"]: row for row in load_jsonl(Path(args.entropy))}
     label_rows = {row["id"]: row for row in load_jsonl(Path(args.labels))}
@@ -162,13 +189,16 @@ def cmd_auroc(args: argparse.Namespace) -> None:
     print(f"Items: {len(common)} (positive class 'soft_label > {args.threshold}': {n_pos}/{len(common)})")
     if result is None:
         print("AUROC undefined -- one class is empty in this sample (need more items or a different threshold).")
-    else:
-        print(f"AUROC ({args.score_field} vs soft_label>{args.threshold}): {result:.3f}")
+        return
+    print(f"AUROC ({args.score_field} vs soft_label>{args.threshold}): {result:.3f}")
+
+    ci = bootstrap_ci(scores, labels, args.bootstrap, args.seed)
+    if ci:
+        print(f"95% bootstrap CI: ({ci[0]:.3f}, {ci[1]:.3f})")
     print(
-        "\nNOTE: this is a raw, non-fold-aware preview over every overlapping id -- NOT the "
-        "reportable number. The real AUROC must use the same cross-validation folds as the "
-        "probes (PLAN.md section 3 step 3, M1's protocol) so the comparison is honest, "
-        "per the paper's own 'before generation beats after' claim."
+        "\nThe entropy score is not fitted to anything, so there are no folds to hold out -- "
+        "this is the reportable number. For the comparison against the probes to be honest, "
+        "both sides must use the same items and the same threshold on the soft label."
     )
 
 
@@ -188,6 +218,9 @@ def main() -> None:
     p_auroc.add_argument("--entropy", required=True, help="Output of the 'compute' subcommand.")
     p_auroc.add_argument("--labels", required=True, help="scripts/soft_labels.py's soft_labels.jsonl.")
     p_auroc.add_argument("--score-field", default="entropy_normalized", choices=["entropy", "entropy_normalized"])
+    p_auroc.add_argument("--bootstrap", type=int, default=2000,
+                         help="Resamples for the confidence interval; 0 disables it.")
+    p_auroc.add_argument("--seed", type=int, default=0)
     p_auroc.add_argument("--threshold", type=float, default=0.0,
                           help="soft_label strictly above this counts as the positive class (default 0.0: "
                                "any hallucinated sample among k marks the item positive).")

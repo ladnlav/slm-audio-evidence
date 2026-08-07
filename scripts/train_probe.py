@@ -58,6 +58,9 @@ def parse_args() -> argparse.Namespace:
                    help="Soft label above this counts as a positive when computing AUROC "
                         "(the label is a fraction; AUROC needs a binary ground truth).")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--bootstrap", type=int, default=2000,
+                   help="Resamples for the AUROC confidence interval; 0 disables it. "
+                        "With few negatives the point estimate alone is misleading.")
     return p.parse_args()
 
 
@@ -142,6 +145,29 @@ def auroc(scores: np.ndarray, labels: np.ndarray) -> float | None:
     return float((ranks[pos].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
 
 
+def bootstrap_ci(scores: np.ndarray, labels: np.ndarray, n: int, seed: int,
+                 alpha: float = 0.05) -> tuple[float, float] | None:
+    """Percentile bootstrap over items for an AUROC.
+
+    Resamples items, not positives and negatives separately: the uncertainty we care
+    about includes how many negatives a rerun of this experiment would even have. Draws
+    in which one class vanishes are skipped, since AUROC is undefined there.
+    """
+    if n <= 0 or labels.sum() == 0 or labels.sum() == len(labels):
+        return None
+    rng = np.random.default_rng(seed)
+    vals = []
+    for _ in range(n):
+        idx = rng.integers(0, len(labels), len(labels))
+        a = auroc(scores[idx], labels[idx])
+        if a is not None:
+            vals.append(a)
+    if not vals:
+        return None
+    lo, hi = np.percentile(vals, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return float(lo), float(hi)
+
+
 def main() -> None:
     args = parse_args()
     out_dir = Path(args.out)
@@ -169,14 +195,18 @@ def main() -> None:
         per_item_scores[name] = scores
         overall = auroc(scores, y_bin)
         within_c = auroc(scores[is_c], y_bin[is_c]) if is_c.sum() > 1 else None
+        ci_c = (bootstrap_ci(scores[is_c], y_bin[is_c], args.bootstrap, args.seed)
+                if is_c.sum() > 1 else None)
         rows.append({
             "features": name,
             "auroc_overall": overall,
             "auroc_within_c": within_c,
+            "ci_within_c": list(ci_c) if ci_c else None,
             "n_items": len(ids),
         })
         fmt = lambda v: f"{v:.3f}" if v is not None else "  n/a"
-        print(f"{name:24s} AUROC {fmt(overall)}   within-C {fmt(within_c)}")
+        ci_txt = f"  ({ci_c[0]:.3f}, {ci_c[1]:.3f})" if ci_c else ""
+        print(f"{name:24s} AUROC {fmt(overall)}   within-C {fmt(within_c)}{ci_txt}")
 
     rows.sort(key=lambda r: (r["auroc_overall"] is None, -(r["auroc_overall"] or 0)))
     best = rows[0]
@@ -189,10 +219,13 @@ def main() -> None:
     np.savez_compressed(out_dir / "probe_scores.npz", ids=np.array(ids),
                         y_soft=y_soft, category=categories, **per_item_scores)
 
-    lines = ["| features | AUROC | AUROC within C |", "|---|---:|---:|"]
+    lines = ["| features | AUROC | AUROC within C | 95% CI within C |", "|---|---:|---:|---:|"]
     for r in rows:
         f = lambda v: f"{v:.3f}" if v is not None else "n/a"
-        lines.append(f"| `{r['features']}` | {f(r['auroc_overall'])} | {f(r['auroc_within_c'])} |")
+        ci = r.get("ci_within_c")
+        ci_txt = f"({ci[0]:.3f}, {ci[1]:.3f})" if ci else "n/a"
+        lines.append(f"| `{r['features']}` | {f(r['auroc_overall'])} | "
+                     f"{f(r['auroc_within_c'])} | {ci_txt} |")
     (out_dir / "auroc.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[+] {out_dir/'auroc.md'}, {out_dir/'auroc.json'}, {out_dir/'probe_scores.npz'}")
 

@@ -62,3 +62,10 @@ paper/*.log
 paper/*.out
 paper/*.fls
 paper/*.fdb_latexmk
+
+# Probing: keep the small artifacts that let the AUROC tables be rebuilt, drop the
+# tensors (representations.npz is 43 MB, the per-token states under full/ are ~750 MB).
+results/probing/**/*.npz
+!results/probing/**/soft_labels*.jsonl
+!results/probing/entropy.jsonl
+!results/probing/**/auroc.json
